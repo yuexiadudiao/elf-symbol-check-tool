@@ -1,0 +1,114 @@
+#!/usr/bin/python
+# -*- coding:utf-8 -*-
+
+#Author:yin
+#Date  :2019-5-10
+#About :check undefined symbol in dynamic link lib,depend
+#on nm and ldd linux command
+#-----------------------VER:1.0--------------------------
+#Author:yin
+#Date  :2019-5-11
+#Fix   :basic fuction
+#-----------------------VER:2.0--------------------------
+#Author:yin
+#Date  :2019-5-11
+#Fix   :
+#1,optimize searching
+#2,suport for sorting answer
+#3,fix wrong searching answer for some special situation
+#4,param checking
+
+import sys
+import os
+import subprocess
+
+def nm_elf_search(path,key=''):
+    symbol_list = []
+    (filepath,filename) = os.path.split(path)
+    if os.path.isfile(path) and not filename.startswith('.'):
+        if '' == key:
+            cmd = ''' nm %s ''' % path
+        else:
+            cmd = "nm %s | grep %s" % (path, key)
+        p = subprocess.Popen(cmd,shell=True, close_fds=True, stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+        stdout,stderr = p.communicate()
+        if '' == stderr:
+            symbol_list = stdout.split('\n')
+    #filter and return
+    symbol_list = list(filter(None, symbol_list))
+    return symbol_list
+            
+
+def ldd_file(path):
+    lib_list = []
+    (filepath,filename) = os.path.split(path)
+    if os.path.isfile(path) and not filename.startswith('.'):
+        cmd = ''' ldd %s ''' % path
+        p = subprocess.Popen(cmd,shell=True, close_fds=True, stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+        stdout,stderr = p.communicate()
+        output = list(filter(None, stdout.split('\n')))
+        for line in output:
+            old_line = line.split()
+            new_line = [word if word.startswith('/') else '' for word in old_line]
+            new_line = ''.join(new_line)  
+            lib_list.append(new_line)
+    #filter and return         
+    lib_list = list(filter(None,lib_list))
+    return lib_list
+                    
+if __name__ == '__main__':
+    if 2 != len(sys.argv):
+        print 'Usage: nmc [elf file]'
+        sys.exit()
+    #get symbol_list
+    symbol_list = nm_elf_search(sys.argv[1],"U\ ")
+    undefined_list = [s.split()[1] for s in symbol_list]  
+    if not undefined_list:
+        print '[Error] : symbol_list is null'
+        sys.exit()
+    #get lib_list
+    lib_list = ldd_file(sys.argv[1])
+    if not lib_list:
+        print '[Error] : lib_list is null'
+        sys.exit()
+    
+    #record all lib_info
+    lib_info_list = []
+    for lib in lib_list:
+        output = nm_elf_search(lib,"T\ ")
+        defined_list = [x.split()[2] for x in output] 
+        lib_info = [lib, defined_list]
+        lib_info_list.append(lib_info)
+    #begin search symbol in lib_info
+    ans_list = []
+    for symbol in undefined_list:
+        find_flag = False
+        for lib_info in lib_info_list:
+            for lib_symbol in lib_info[1]:
+                if symbol in lib_symbol:
+                    find_flag = True
+                    ans_list.append([symbol,'found',lib_info[0]])
+                    break
+            if find_flag:
+                break
+        #ignore func in glibc
+        if not find_flag and 'GLIBC' in symbol:
+            ans_list.append([symbol,'found',''])
+        elif not find_flag:
+            ans_list.append([symbol,'not found',''])
+    #sort by lib name
+    yy = sorted(ans_list,key = lambda x: x[2], reverse = True)
+    #print answer
+    for line in yy:
+       print "[%70s] [%9s] [%-50s]" % (line[0], line[1], line[2])
+    
+    #print attched reporter
+    print '-------------------------------------------------------------------------'
+    print 'Undfined symbol:%d' % len(symbol_list)
+    print '------------------------------ symbol_list ------------------------------'
+    for sym in symbol_list:
+        print sym.split()[1]
+    print '-------------------------------- lib_list -------------------------------'
+    lib_list_sort = lib_list.sort()
+    for lib in lib_list:
+        print lib

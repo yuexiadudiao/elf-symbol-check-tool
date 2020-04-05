@@ -1,0 +1,34 @@
+#!/usr/bin/python
+#Author:yin
+#Date  :2019-05-05
+#About :a simple tool that can find the file which contains the symbol
+#       using linux nm command
+
+
+import os
+import subprocess
+import sys
+
+def print_usage():
+    print "Usage: nm [dirctory] [symbol]"
+
+if __name__ == '__main__':
+    #param checking
+    param_num = len(sys.argv)
+    if 3 != param_num:
+        print_usage()
+        sys.exit()
+
+    list = os.listdir(sys.argv[1])
+
+    for file in list:
+        filepath=os.path.join(sys.argv[1],file)
+        if os.path.isfile(filepath):
+            if not file.startswith('.'):
+                cmd = ''' nm %s | grep %s ''' % (filepath,sys.argv[2])
+                p = subprocess.Popen(cmd,shell=True, close_fds=True, stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+                stdout,stderr = p.communicate()
+                if '' == stderr:
+                    #only print the case that has right output(contains null output)
+                    print "[%s]" % file
+                    print stdout
